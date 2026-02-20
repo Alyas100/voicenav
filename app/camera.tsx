@@ -1,13 +1,14 @@
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { router } from 'expo-router';
 import * as Speech from 'expo-speech';
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
     Dimensions,
     SafeAreaView,
     StyleSheet,
     Text,
     TouchableOpacity,
+    TouchableWithoutFeedback,
     View
 } from 'react-native';
 import { analyzeImage } from '../services/geminiService';
@@ -17,6 +18,32 @@ export default function CameraScreen() {
     const cameraRef = useRef<CameraView>(null);
     const [isAnalyzing, setIsAnalyzing] = useState(false);
     const [lastAnalysis, setLastAnalysis] = useState('');
+    const [lastTap, setLastTap] = useState(0);
+
+    // Auto-announce when camera opens
+    useEffect(() => {
+        const announceCameraReady = () => {
+            Speech.speak('Camera ready. Point your phone towards buses. Double tap anywhere on screen to capture and analyze.', {
+                rate: 1.0,
+                pitch: 1.0,
+            });
+        };
+
+        if (permission?.granted) {
+            setTimeout(announceCameraReady, 800);
+        }
+    }, [permission?.granted]);
+
+    // Handle double-tap anywhere on screen
+    const handleScreenTap = () => {
+        const now = Date.now();
+
+        if (now - lastTap < 300) { // Double tap within 300ms
+            captureAndAnalyze();
+        }
+
+        setLastTap(now);
+    };
 
     const captureAndAnalyze = async () => {
         if (!cameraRef.current || isAnalyzing) return;
@@ -94,60 +121,62 @@ export default function CameraScreen() {
     }
 
     return (
-        <View style={{ flex: 1, backgroundColor: '#0b132b' }}>
-            <CameraView
-                style={{ flex: 1 }}
-                ref={cameraRef}
-                facing="back"
-            />
+        <TouchableWithoutFeedback onPress={handleScreenTap}>
+            <View style={{ flex: 1, backgroundColor: '#0b132b' }}>
+                <CameraView
+                    style={{ flex: 1 }}
+                    ref={cameraRef}
+                    facing="back"
+                />
 
-            {/* Top Bar */}
-            <SafeAreaView style={styles.topBar}>
-                <TouchableOpacity onPress={() => router.back()}>
-                    <Text style={styles.icon}>✖️</Text>
-                </TouchableOpacity>
+                {/* Top Bar */}
+                <SafeAreaView style={styles.topBar}>
+                    <TouchableOpacity onPress={() => router.back()}>
+                        <Text style={styles.icon}>✖️</Text>
+                    </TouchableOpacity>
 
-                <TouchableOpacity>
-                    <Text style={styles.icon}>🔊</Text>
-                </TouchableOpacity>
-            </SafeAreaView>
+                    <TouchableOpacity>
+                        <Text style={styles.icon}>🔊</Text>
+                    </TouchableOpacity>
+                </SafeAreaView>
 
-            {/* Detection Box */}
-            <View style={styles.overlay}>
-                <View style={styles.detectionBox}>
-                    <Text style={{ color: '#4da3ff', fontWeight: 'bold' }}>
-                        DETECTION ZONE
+                {/* Detection Box */}
+                <View style={styles.overlay}>
+                    <View style={styles.detectionBox}>
+                        <Text style={{ color: '#4da3ff', fontWeight: 'bold' }}>
+                            {isAnalyzing ? 'ANALYZING...' : 'DETECTION ZONE'}
+                        </Text>
+                        <Text style={{ color: '#ccc', marginTop: 6 }}>
+                            [LIVE FEED]
+                        </Text>
+                        <Text style={{ color: '#888', marginTop: 4 }}>
+                            {isAnalyzing ? 'Please wait...' : 'Double tap anywhere to capture'}
+                        </Text>
+                    </View>
+                </View>
+
+                {/* Bottom UI */}
+                <View style={styles.bottom}>
+                    <Text style={styles.scanText}>
+                        {isAnalyzing ? '🔍 ANALYZING...' : '🔎 SCANNING...'}
                     </Text>
-                    <Text style={{ color: '#ccc', marginTop: 6 }}>
-                        [LIVE FEED]
-                    </Text>
-                    <Text style={{ color: '#888', marginTop: 4 }}>
-                        Point at bus front
+
+                    <TouchableOpacity
+                        style={[styles.captureBtn, isAnalyzing && styles.captureDisabled]}
+                        onPress={captureAndAnalyze}
+                        disabled={isAnalyzing}
+                    >
+                        <Text style={{ color: 'white', fontWeight: 'bold' }}>
+                            {isAnalyzing ? 'ANALYZING...' : 'CAPTURE NOW'}
+                        </Text>
+                    </TouchableOpacity>
+
+                    <Text style={styles.hint}>
+                        {lastAnalysis || 'DOUBLE TAP ANYWHERE TO CAPTURE • TOUCH X TO GO HOME'}
                     </Text>
                 </View>
             </View>
-
-            {/* Bottom UI */}
-            <View style={styles.bottom}>
-                <Text style={styles.scanText}>
-                    {isAnalyzing ? '🔍 ANALYZING...' : '🔎 SCANNING...'}
-                </Text>
-
-                <TouchableOpacity
-                    style={[styles.captureBtn, isAnalyzing && styles.captureDisabled]}
-                    onPress={captureAndAnalyze}
-                    disabled={isAnalyzing}
-                >
-                    <Text style={{ color: 'white', fontWeight: 'bold' }}>
-                        {isAnalyzing ? 'ANALYZING...' : 'CAPTURE NOW'}
-                    </Text>
-                </TouchableOpacity>
-
-                <Text style={styles.hint}>
-                    {lastAnalysis || 'HOLD PHONE STEADY • ALIGN BUS IN FRAME'}
-                </Text>
-            </View>
-        </View>
+        </TouchableWithoutFeedback>
     );
 }
 
